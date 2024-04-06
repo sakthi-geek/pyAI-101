@@ -35,17 +35,19 @@ class CrossEntropyLoss:
 class BinaryCrossEntropyLoss:
     def forward(self, logits, targets):
         """
-        Forward pass for Binary Cross-Entropy loss.
+        Forward pass for Binary Cross-Entropy loss, improved for numerical stability.
         """
-        self.predictions = 1 / (1 + np.exp(-logits))
+        self.predictions = 1 / (1 + np.exp(-np.clip(logits, -250, 250)))  # Clipping logits for numerical stability
         self.targets = targets
-        return -np.mean(targets * np.log(self.predictions + 1e-15) + (1 - targets) * np.log(1 - self.predictions + 1e-15))
+        return -np.mean(targets * np.log(np.clip(self.predictions, 1e-15, 1 - 1e-15)) +
+                        (1 - targets) * np.log(np.clip(1 - self.predictions, 1e-15, 1 - 1e-15)))
 
     def backward(self):
         """
         Backward pass for Binary Cross-Entropy loss.
         """
-        return (self.predictions - self.targets) / (self.predictions * (1 - self.predictions) * np.size(self.targets))
+        return (self.predictions - self.targets) / (self.predictions * (1 - self.predictions) * np.size(self.targets) + 1e-15)
+
 
 
 class L1Loss: # Absolute error
@@ -65,22 +67,18 @@ class L1Loss: # Absolute error
 
 class SoftmaxCrossEntropyLoss:
     def softmax(self, logits):
-        exps = np.exp(logits - np.max(logits, axis=1, keepdims=True))
+        # Applying the log-sum-exp trick for numerical stability in softmax
+        shift_logits = logits - np.max(logits, axis=1, keepdims=True)
+        exps = np.exp(shift_logits)
         return exps / np.sum(exps, axis=1, keepdims=True)
 
     def forward(self, logits, targets):
-        """
-        Forward pass for the combined softmax and cross-entropy loss.
-        """
         self.softmax_output = self.softmax(logits)
         self.targets = targets
-        # Using clip to prevent NaNs in log
+        # Improved numerical stability in log
         clipped_softmax_output = np.clip(self.softmax_output, 1e-15, 1 - 1e-15)
         return -np.sum(targets * np.log(clipped_softmax_output)) / logits.shape[0]
 
     def backward(self):
-        """
-        Backward pass for softmax cross-entropy loss.
-        """
         return (self.softmax_output - self.targets) / self.targets.shape[0]
 
