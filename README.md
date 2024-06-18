@@ -201,7 +201,7 @@ For major changes, please open an issue first to discuss what you would like to 
 
 ## License
 
-This project is licensed under the MIT License - see the [license.txt](license.txt) file for details.
+This project is licensed under the MIT License - see the [license.txt](LICENSE) file for details.
 
 ## Acknowledgements
 
