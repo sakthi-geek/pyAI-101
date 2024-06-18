@@ -162,6 +162,7 @@ model.fit(X, y)
 # Make predictions
 predictions = model.predict([[5, 6]])
 print(predictions)
+```
 
 ### Exploring Deep Learning Architectures
 
@@ -175,6 +176,7 @@ cnn_model = ConvolutionalNeuralNetwork()
 
 # Define your data and train the model
 # ...
+```
 
 ## Contributing
 
