@@ -120,6 +120,7 @@ pyAI-101/
 └── resources/
     ├── seminal_papers/
     └── external_links.md
+```
 
 ## Installation
 
