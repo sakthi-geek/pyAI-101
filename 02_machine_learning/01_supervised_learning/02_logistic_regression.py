@@ -1,185 +1,185 @@
+import sys
+import os
+
+import torch
+
+project_root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
+print(project_root_dir)
+
+# Add the root directory of the project to the Python path
+sys.path.append(project_root_dir)
+#-------------------------------------------------------------------------------------------
+
 import numpy as np
+from common_components.activation_functions import Sigmoid
+from common_components.loss_functions import BinaryCrossEntropy
+from common_components.optimizers import SGD
+from common_components.evaluation_metrics import Accuracy, Precision, Recall, F1Score, LogLoss
+from sklearn.datasets import load_breast_cancer
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression as SklearnLogisticRegression
-from sklearn.metrics import accuracy_score
-
-class CrossEntropyLoss:
-    """Cross Entropy Loss Function for Logistic Regression."""
-    @staticmethod
-    def compute_loss(y_pred, y_true):
-        epsilon = 1e-15
-        y_pred = np.clip(y_pred, epsilon, 1 - epsilon)
-        return -np.mean(y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred))
-
-    @staticmethod
-    def compute_gradient(y_pred, y_true):
-        return y_pred - y_true
-
-class GradientDescentOptimizer:
-    """Basic Gradient Descent Optimizer."""
-    def __init__(self, learning_rate):
-        self.learning_rate = learning_rate
-
-    def update(self, parameter, gradient):
-        return parameter - self.learning_rate * gradient
+import time
+import cProfile
 
 class LogisticRegression:
-    def __init__(self, learning_rate=0.01, epochs=1000, init_strategy='zeros', 
-                 fit_intercept=True, normalize=False, regularization=None, alpha=1.0, 
-                 early_stopping=False, tolerance=1e-4):
+    """
+    Logistic Regression model.
+
+    This implementation follows a similar structure to scikit-learn, with methods like fit(), predict(), and score().
+    """
+    def __init__(self, learning_rate=0.01, epochs=1000, optimizer=None, loss_function=None, threshold=0.5):
         """
-        Initialize LogisticRegression model.
-        :param learning_rate: Learning rate for gradient descent.
-        :param epochs: Number of iterations for gradient descent.
-        :param init_strategy: Strategy for initializing weights ('zeros' or 'random').
-        :param fit_intercept: Boolean, whether to fit the intercept term.
-        :param normalize: Boolean, whether to standardize the data.
-        :param regularization: Type of regularization ('l1', 'l2', or None).
-        :param alpha: Regularization strength (only for 'l1' and 'l2' regularization).
-        :param early_stopping: Boolean, whether to use early stopping.
-        :param tolerance: Minimum improvement in loss for stopping early.
+        Initialize the Logistic Regression model.
+
+        Args:
+            learning_rate (float): Learning rate for the optimizer. Defaults to 0.01.
+            epochs (int): Number of training epochs. Defaults to 1000.
+            optimizer (Optimizer): Optimizer for updating the weights. Defaults to SGD.
+            loss_function (LossFunction): Loss function for training. Defaults to BinaryCrossEntropy.
+            threshold (float): Decision threshold for classification. Defaults to 0.5.
         """
         self.learning_rate = learning_rate
         self.epochs = epochs
-        self.init_strategy = init_strategy
-        self.fit_intercept = fit_intercept
-        self.normalize = normalize
-        self.regularization = regularization
-        self.alpha = alpha
-        self.early_stopping = early_stopping
-        self.tolerance = tolerance
+        self.optimizer = optimizer if optimizer else SGD(learning_rate=self.learning_rate)
+        self.loss_function = loss_function if loss_function else BinaryCrossEntropy()
+        self.threshold = threshold
         self.weights = None
         self.bias = None
-
-        self.scaler = StandardScaler() if normalize else None
-        self.loss_function = CrossEntropyLoss()
-        self.optimizer = GradientDescentOptimizer(learning_rate)
-
-    def _initialize_parameters(self, n_features):
-        """Initialize the model parameters."""
-        if self.init_strategy == 'zeros':
-            self.weights = np.zeros(n_features)
-            self.bias = 0 if self.fit_intercept else None
-        elif self.init_strategy == 'random':
-            self.weights = np.random.randn(n_features)
-            self.bias = np.random.randn() if self.fit_intercept else None
-        else:
-            raise ValueError("Invalid initialization strategy")
-
-    def _linear_function(self, X):
-        """Compute the linear function of the input."""
-        return np.dot(X, self.weights) + (self.bias if self.fit_intercept else 0)
-
-    def _sigmoid(self, z):
-        """Compute the sigmoid function."""
-        return 1 / (1 + np.exp(-z))
-
-    def _apply_regularization(self, dw, n_samples):
-        """Apply regularization to the weight gradients."""
-        if self.regularization == 'l1':
-            dw += (self.alpha * np.sign(self.weights)) / n_samples
-        elif self.regularization == 'l2':
-            dw += (self.alpha * self.weights) / n_samples
-        return dw
-
-    def _compute_gradients(self, X, y, y_pred):
-        """Compute gradients for gradient descent."""
-        n_samples = len(y)
-        error = self.loss_function.compute_gradient(y_pred, y)
-
-        dw = np.dot(X.T, error) / n_samples
-        dw = self._apply_regularization(dw, n_samples)
-        db = np.sum(error) / n_samples if self.fit_intercept else 0
-
-        return dw, db
+        self.losses = []
+        self.activation = Sigmoid()
 
     def fit(self, X, y):
-        """Train the Logistic Regression model using gradient descent."""
-        if self.scaler:
-            X = self.scaler.fit_transform(X)
+        """
+        Fit the Logistic Regression model to the training data.
 
+        Args:
+            X (np.ndarray): Training data of shape (n_samples, n_features).
+            y (np.ndarray): Target values of shape (n_samples,).
+        """
         n_samples, n_features = X.shape
-        self._initialize_parameters(n_features)
+        self.weights = np.zeros(n_features)
+        self.bias = 0
 
-        prev_loss = float('inf')
-        for _ in range(self.epochs):
-            linear_output = self._linear_function(X)
-            y_pred = self._sigmoid(linear_output)
-            dw, db = self._compute_gradients(X, y, y_pred)
+        for epoch in range(self.epochs):
+            linear_model = self._linear_combination(X)
+            y_pred = self.activation.forward(linear_model)
 
+            # Compute loss
+            loss = self.loss_function.forward(y, y_pred)
+            self.losses.append(loss)
+
+            # Compute gradients
+            dw = (1 / n_samples) * np.dot(X.T, (y_pred - y))
+            db = (1 / n_samples) * np.sum(y_pred - y)
+
+            # Update parameters
             self.weights = self.optimizer.update(self.weights, dw)
-            if self.fit_intercept:
-                self.bias = self.optimizer.update(self.bias, db)
+            self.bias -= self.learning_rate * db
 
-            # Early stopping
-            current_loss = self.loss_function.compute_loss(y_pred, y)
-            if self.early_stopping and abs(prev_loss - current_loss) < self.tolerance:
-                break
-            prev_loss = current_loss
-
-        return self
+            if epoch % 100 == 0:
+                print(f'Epoch {epoch}, Loss: {loss}')
 
     def predict_proba(self, X):
-        """Predict probability estimates for given data using trained model."""
-        if self.scaler:
-            X = self.scaler.transform(X)
-        linear_output = self._linear_function(X)
-        return self._sigmoid(linear_output)
+        """
+        Predict probabilities using the trained Logistic Regression model.
 
-    def predict(self, X, threshold=0.5):
-        """Predict binary target values for given data using trained model."""
-        probas = self.predict_proba(X)
-        return (probas >= threshold).astype(int)
+        Args:
+            X (np.ndarray): Input data of shape (n_samples, n_features).
 
-    def score(self, X, y, metric='accuracy'):
-        """Calculate accuracy or another metric for the predictions."""
+        Returns:
+            np.ndarray: Predicted probabilities of shape (n_samples,).
+        """
+        linear_model = self._linear_combination(X)
+        return self.activation.forward(linear_model)
+
+    def predict(self, X):
+        """
+        Predict binary target values using the trained Logistic Regression model.
+
+        Args:
+            X (np.ndarray): Input data of shape (n_samples, n_features).
+
+        Returns:
+            np.ndarray: Predicted binary target values of shape (n_samples,).
+        """
+        probabilities = self.predict_proba(X)
+        return (probabilities >= self.threshold).astype(int)
+
+    def score(self, X, y):
+        """
+        Evaluate the model using the accuracy metric.
+
+        Args:
+            X (np.ndarray): Test data of shape (n_samples, n_features).
+            y (np.ndarray): True values of shape (n_samples,).
+
+        Returns:
+            float: Accuracy score.
+        """
         y_pred = self.predict(X)
+        accuracy = Accuracy().compute(y, y_pred)
+        return accuracy
 
-        if metric == 'accuracy':
-            return accuracy_score(y, y_pred)
-        elif metric == 'mse':
-            return mean_squared_error(y, y_pred)
-        else:
-            raise ValueError("Unsupported metric. Use 'accuracy' or 'mse'.")
+    def _linear_combination(self, X):
+        """
+        Internal method to compute the linear combination of input features and weights.
 
-class StandardScaler:
-    """Standardize features by removing the mean and scaling to unit variance."""
-    def fit_transform(self, X):
-        self.mean_ = np.mean(X, axis=0)
-        self.scale_ = np.std(X, axis=0)
-        return (X - self.mean_) / self.scale_
+        Args:
+            X (np.ndarray): Input data of shape (n_samples, n_features).
 
-    def transform(self, X):
-        return (X - self.mean_) / self.scale_
+        Returns:
+            np.ndarray: Linear combination of shape (n_samples,).
+        """
+        return np.dot(X, self.weights) + self.bias
 
-def mean_squared_error(y_true, y_pred):
-    """Calculate the Mean Squared Error (MSE) between true and predicted values."""
-    return np.mean((y_true - y_pred) ** 2)
 
-def generate_data(n_samples=100):
-    """Generate synthetic binary classification data for testing."""
-    X = np.random.rand(n_samples, 1)
-    y = (3 * X.squeeze() + 4 + np.random.randn(n_samples) * 0.5 > 4.5).astype(int)
-    return X, y
+def test_and_benchmark():
+    # Load and prepare the Breast Cancer dataset
+    data = load_breast_cancer()
+    X, y = data.data, data.target
 
-def main():
-    # Generate data
-    X, y = generate_data()
-    
-    # From-scratch implementation
-    lr = LogisticRegression(learning_rate=0.01, epochs=1000, init_strategy='zeros')
-    lr.fit(X, y)
-    y_pred_scratch = lr.predict(X)
-    accuracy_scratch = lr.score(X, y, metric='accuracy')
-    
-    # Scikit-learn implementation
-    sklearn_lr = SklearnLogisticRegression()
-    sklearn_lr.fit(X, y)
-    y_pred_sklearn = sklearn_lr.predict(X)
-    accuracy_sklearn = accuracy_score(y, y_pred_sklearn)
-    
-    # Print results
-    print(f"From-scratch implementation accuracy: {accuracy_scratch}")
-    print(f"Scikit-learn implementation accuracy: {accuracy_sklearn}")
+    # Standardize the dataset
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+
+    # Split the dataset into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Initialize and train the scratch Logistic Regression model
+    scratch_model = LogisticRegression(learning_rate=0.01, epochs=1000)
+    start_time = time.time()
+    scratch_model.fit(X_train, y_train)
+    scratch_train_time = time.time() - start_time
+
+    # Predict and evaluate the scratch model
+    scratch_predictions = scratch_model.predict(X_test)
+    scratch_accuracy = scratch_model.score(X_test, y_test)
+    scratch_precision = Precision().compute(y_test, scratch_predictions)
+    scratch_recall = Recall().compute(y_test, scratch_predictions)
+    scratch_f1 = F1Score().compute(y_test, scratch_predictions)
+    scratch_log_loss = LogLoss().compute(y_test, scratch_model.predict_proba(X_test))
+
+    print(f"\nScratch Model - Accuracy: {scratch_accuracy:.4f}, Precision: {scratch_precision:.4f}, Recall: {scratch_recall:.4f}, F1 Score: {scratch_f1:.4f}, Log Loss: {scratch_log_loss:.4f}, Training Time: {scratch_train_time:.4f}s")
+
+    # Initialize and train the scikit-learn Logistic Regression model
+    sklearn_model = SklearnLogisticRegression(max_iter=1000)
+    start_time = time.time()
+    sklearn_model.fit(X_train, y_train)
+    sklearn_train_time = time.time() - start_time
+
+    # Predict and evaluate the scikit-learn model
+    sklearn_predictions = sklearn_model.predict(X_test)
+    sklearn_accuracy = sklearn_model.score(X_test, y_test)
+    sklearn_precision = Precision().compute(y_test, sklearn_predictions)
+    sklearn_recall = Recall().compute(y_test, sklearn_predictions)
+    sklearn_f1 = F1Score().compute(y_test, sklearn_predictions)
+    sklearn_log_loss = LogLoss().compute(y_test, sklearn_model.predict_proba(X_test)[:, 1])
+
+    print(f"Scikit-learn Model - Accuracy: {sklearn_accuracy:.4f}, Precision: {sklearn_precision:.4f}, Recall: {sklearn_recall:.4f}, F1 Score: {sklearn_f1:.4f}, Log Loss: {sklearn_log_loss:.4f}, Training Time: {sklearn_train_time:.4f}s")
+
+    # # Profiling the scratch model training
+    # cProfile.run('scratch_model.fit(X_train, y_train)', 'logistic_regression_profile.prof')
 
 if __name__ == "__main__":
-    main()
+    test_and_benchmark()

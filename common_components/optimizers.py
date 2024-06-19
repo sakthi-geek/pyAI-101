@@ -28,14 +28,17 @@ class SGD(Optimizer):
         Update parameters using stochastic gradient descent.
 
         Args:
-            params (dict): Dictionary of parameters to be updated.
-            grads (dict): Dictionary of gradients for each parameter.
+            params (np.ndarray or dict): Dictionary of parameters to be updated.
+            grads (np.ndarray or dict): Dictionary of gradients for each parameter.
 
         Returns:
-            dict: Updated parameters.
+            np.ndarray or dict: Updated parameters.
         """
-        for key in params.keys():
-            params[key] -= self.learning_rate * grads[key]
+        if isinstance(params, dict):
+            for key in params.keys():
+                params[key] -= self.learning_rate * grads[key]
+        else:
+            params -= self.learning_rate * grads
         return params
 
 #-------------------------------------------------------------------------------------------

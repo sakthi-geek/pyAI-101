@@ -1,135 +1,165 @@
+import sys
+import os
+
+import torch
+
+project_root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
+print(project_root_dir)
+
+# Add the root directory of the project to the Python path
+sys.path.append(project_root_dir)
+#-------------------------------------------------------------------------------------------
+
 import numpy as np
+from sklearn.datasets import load_iris
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from sklearn.naive_bayes import GaussianNB as SklearnGaussianNB
-from sklearn.metrics import accuracy_score
+from common_components.evaluation_metrics import Accuracy, Precision, Recall, F1Score, LogLoss
+import time
+import cProfile
 
 class NaiveBayes:
-    def __init__(self):
-        """
-        Initialize the Naive Bayes model.
-        """
-        self.classes = None
-        self.means = None
-        self.variances = None
-        self.priors = None
+    """
+    Naive Bayes classifier.
 
+    This implementation follows a similar structure to scikit-learn, with methods like fit(), predict(), and score().
+    """
     def fit(self, X, y):
         """
-        Train the Naive Bayes model.
+        Fit the Naive Bayes model to the training data.
 
-        Parameters:
-        X (ndarray): Feature matrix.
-        y (ndarray): Label array.
+        Args:
+            X (np.ndarray): Training data of shape (n_samples, n_features).
+            y (np.ndarray): Target values of shape (n_samples,).
         """
         n_samples, n_features = X.shape
         self.classes = np.unique(y)
         n_classes = len(self.classes)
 
-        self.means = np.zeros((n_classes, n_features), dtype=np.float64)
-        self.variances = np.zeros((n_classes, n_features), dtype=np.float64)
+        # Calculate mean, var, and prior for each class
+        self.mean = np.zeros((n_classes, n_features), dtype=np.float64)
+        self.var = np.zeros((n_classes, n_features), dtype=np.float64)
         self.priors = np.zeros(n_classes, dtype=np.float64)
 
         for idx, c in enumerate(self.classes):
             X_c = X[y == c]
-            self.means[idx, :] = X_c.mean(axis=0)
-            self.variances[idx, :] = X_c.var(axis=0)
+            self.mean[idx, :] = X_c.mean(axis=0)
+            self.var[idx, :] = X_c.var(axis=0)
             self.priors[idx] = X_c.shape[0] / float(n_samples)
 
-    def _pdf(self, class_idx, x):
+    def predict(self, X):
         """
-        Calculate the probability density function for a given class and feature.
+        Predict target values using the trained Naive Bayes model.
 
-        Parameters:
-        class_idx (int): Index of the class.
-        x (float): Feature value.
+        Args:
+            X (np.ndarray): Input data of shape (n_samples, n_features).
 
         Returns:
-        float: Probability density.
+            np.ndarray: Predicted target values of shape (n_samples,).
         """
-        mean = self.means[class_idx]
-        var = self.variances[class_idx]
-        numerator = np.exp(- (x - mean) ** 2 / (2 * var))
-        denominator = np.sqrt(2 * np.pi * var)
-        return numerator / denominator
+        y_pred = [self._predict(x) for x in X]
+        return np.array(y_pred)
 
     def _predict(self, x):
         """
-        Predict the class for a single sample.
+        Predict the class label for a single sample.
 
-        Parameters:
-        x (ndarray): Feature vector.
+        Args:
+            x (np.ndarray): Input sample of shape (n_features,).
 
         Returns:
-        int: Predicted class.
+            int: Predicted class label.
         """
         posteriors = []
 
         for idx, c in enumerate(self.classes):
             prior = np.log(self.priors[idx])
-            posterior = np.sum(np.log(self._pdf(idx, x)))
-            posterior = prior + posterior
+            class_conditional = np.sum(np.log(self._pdf(idx, x)))
+            posterior = prior + class_conditional
             posteriors.append(posterior)
 
         return self.classes[np.argmax(posteriors)]
 
-    def predict(self, X):
+    def _pdf(self, class_idx, x):
         """
-        Predict the classes for the input samples.
+        Calculate the probability density function for a given class and sample.
 
-        Parameters:
-        X (ndarray): Feature matrix.
+        Args:
+            class_idx (int): Index of the class.
+            x (np.ndarray): Input sample of shape (n_features,).
 
         Returns:
-        ndarray: Predicted classes.
+            np.ndarray: Probability density function values.
         """
-        y_pred = [self._predict(x) for x in X]
-        return np.array(y_pred)
+        mean = self.mean[class_idx]
+        var = self.var[class_idx]
+        numerator = np.exp(- (x - mean) ** 2 / (2 * var))
+        denominator = np.sqrt(2 * np.pi * var)
+        return numerator / denominator
 
     def score(self, X, y):
         """
-        Calculate the accuracy of the predictions.
+        Evaluate the model using the accuracy metric.
 
-        Parameters:
-        X (ndarray): Feature matrix.
-        y (ndarray): True labels.
+        Args:
+            X (np.ndarray): Test data of shape (n_samples, n_features).
+            y (np.ndarray): True values of shape (n_samples,).
 
         Returns:
-        float: Accuracy score.
+            float: Accuracy score.
         """
         y_pred = self.predict(X)
-        return accuracy_score(y, y_pred)
+        accuracy = Accuracy().compute(y, y_pred)
+        return accuracy
 
-def generate_data(n_samples=100):
-    """
-    Generate synthetic data for testing.
 
-    Parameters:
-    n_samples (int): Number of samples to generate.
+def test_and_benchmark():
+    # Load and prepare the Iris dataset
+    data = load_iris()
+    X, y = data.data, data.target
 
-    Returns:
-    tuple: Feature matrix and label array.
-    """
-    np.random.seed(0)
-    X = np.random.randn(n_samples, 2)
-    y = np.array([0 if x[0] + x[1] < 0 else 1 for x in X])
-    return X, y
+    # Standardize the dataset
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
 
-def main():
-    # Generate data
-    X, y = generate_data()
+    # Split the dataset into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # From-scratch implementation
-    nb = NaiveBayes()
-    nb.fit(X, y)
-    accuracy_scratch = nb.score(X, y)
+    # Initialize and train the scratch Naive Bayes model
+    scratch_model = NaiveBayes()
+    start_time = time.time()
+    scratch_model.fit(X_train, y_train)
+    scratch_train_time = time.time() - start_time
 
-    # Scikit-learn implementation
-    sklearn_nb = SklearnGaussianNB()
-    sklearn_nb.fit(X, y)
-    accuracy_sklearn = sklearn_nb.score(X, y)
+    # Predict and evaluate the scratch model
+    scratch_predictions = scratch_model.predict(X_test)
+    scratch_accuracy = scratch_model.score(X_test, y_test)
+    scratch_precision = Precision().compute(y_test, scratch_predictions)
+    scratch_recall = Recall().compute(y_test, scratch_predictions)
+    scratch_f1 = F1Score().compute(y_test, scratch_predictions)
+    scratch_log_loss = LogLoss().compute(y_test, scratch_model.predict(X_test))
 
-    # Print results
-    print(f"From-scratch implementation accuracy: {accuracy_scratch}")
-    print(f"Scikit-learn implementation accuracy: {accuracy_sklearn}")
+    print(f"\nScratch Model - Accuracy: {scratch_accuracy:.4f}, Precision: {scratch_precision:.4f}, Recall: {scratch_recall:.4f}, F1 Score: {scratch_f1:.4f}, Log Loss: {scratch_log_loss:.4f}, Training Time: {scratch_train_time:.4f}s")
+
+    # Initialize and train the scikit-learn Naive Bayes model
+    sklearn_model = SklearnGaussianNB()
+    start_time = time.time()
+    sklearn_model.fit(X_train, y_train)
+    sklearn_train_time = time.time() - start_time
+
+    # Predict and evaluate the scikit-learn model
+    sklearn_predictions = sklearn_model.predict(X_test)
+    sklearn_accuracy = sklearn_model.score(X_test, y_test)
+    sklearn_precision = Precision().compute(y_test, sklearn_predictions)
+    sklearn_recall = Recall().compute(y_test, sklearn_predictions)
+    sklearn_f1 = F1Score().compute(y_test, sklearn_predictions)
+    sklearn_log_loss = LogLoss().compute(y_test, sklearn_model.predict_proba(X_test)[:, 1])
+
+    print(f"Scikit-learn Model - Accuracy: {sklearn_accuracy:.4f}, Precision: {sklearn_precision:.4f}, Recall: {sklearn_recall:.4f}, F1 Score: {sklearn_f1:.4f}, Log Loss: {sklearn_log_loss:.4f}, Training Time: {sklearn_train_time:.4f}s")
+
+    # # Profiling the scratch model training
+    # cProfile.run('scratch_model.fit(X_train, y_train)', 'naive_bayes_profile.prof')
 
 if __name__ == "__main__":
-    main()
+    test_and_benchmark()

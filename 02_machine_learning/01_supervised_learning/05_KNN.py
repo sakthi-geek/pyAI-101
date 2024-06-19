@@ -1,118 +1,140 @@
+import sys
+import os
+
+import torch
+
+project_root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
+print(project_root_dir)
+
+# Add the root directory of the project to the Python path
+sys.path.append(project_root_dir)
+#-------------------------------------------------------------------------------------------
+
 import numpy as np
-from sklearn.neighbors import KNeighborsClassifier as SklearnKNN
-from sklearn.metrics import accuracy_score
+from sklearn.datasets import load_iris
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.neighbors import KNeighborsClassifier as SklearnKNeighborsClassifier
+from common_components.evaluation_metrics import Accuracy, Precision, Recall, F1Score
+from collections import Counter
+import time
+import cProfile
 
 class KNN:
+    """
+    K-Nearest Neighbors (KNN) classifier.
+
+    This implementation follows a similar structure to scikit-learn, with methods like fit(), predict(), and score().
+    """
     def __init__(self, k=3):
         """
         Initialize the KNN model.
 
-        Parameters:
-        k (int): Number of neighbors to use for classification.
+        Args:
+            k (int): Number of neighbors to consider. Defaults to 3.
         """
         self.k = k
-        self.X_train = None
-        self.y_train = None
 
     def fit(self, X, y):
         """
-        Train the KNN model.
+        Fit the KNN model to the training data.
 
-        Parameters:
-        X (ndarray): Feature matrix.
-        y (ndarray): Label array.
+        Args:
+            X (np.ndarray): Training data of shape (n_samples, n_features).
+            y (np.ndarray): Target values of shape (n_samples,).
         """
         self.X_train = X
         self.y_train = y
 
-    def _euclidean_distance(self, x1, x2):
-        """
-        Calculate the Euclidean distance between two points.
-
-        Parameters:
-        x1 (ndarray): First point.
-        x2 (ndarray): Second point.
-
-        Returns:
-        float: Euclidean distance.
-        """
-        return np.sqrt(np.sum((x1 - x2) ** 2))
-
-    def _predict(self, x):
-        """
-        Predict the class for a single sample.
-
-        Parameters:
-        x (ndarray): Feature vector.
-
-        Returns:
-        int: Predicted class.
-        """
-        distances = [self._euclidean_distance(x, x_train) for x_train in self.X_train]
-        k_indices = np.argsort(distances)[:self.k]
-        k_nearest_labels = [self.y_train[i] for i in k_indices]
-        most_common = np.bincount(k_nearest_labels).argmax()
-        return most_common
-
     def predict(self, X):
         """
-        Predict the classes for the input samples.
+        Predict target values using the trained KNN model.
 
-        Parameters:
-        X (ndarray): Feature matrix.
+        Args:
+            X (np.ndarray): Input data of shape (n_samples, n_features).
 
         Returns:
-        ndarray: Predicted classes.
+            np.ndarray: Predicted target values of shape (n_samples,).
         """
         y_pred = [self._predict(x) for x in X]
         return np.array(y_pred)
 
-    def score(self, X, y):
+    def _predict(self, x):
         """
-        Calculate the accuracy of the predictions.
+        Predict the class label for a single sample.
 
-        Parameters:
-        X (ndarray): Feature matrix.
-        y (ndarray): True labels.
+        Args:
+            x (np.ndarray): Input sample of shape (n_features,).
 
         Returns:
-        float: Accuracy score.
+            int: Predicted class label.
+        """
+        distances = [np.linalg.norm(x - x_train) for x_train in self.X_train]
+        k_indices = np.argsort(distances)[:self.k]
+        k_nearest_labels = [self.y_train[i] for i in k_indices]
+        most_common = Counter(k_nearest_labels).most_common(1)
+        return most_common[0][0]
+
+    def score(self, X, y):
+        """
+        Evaluate the model using the accuracy metric.
+
+        Args:
+            X (np.ndarray): Test data of shape (n_samples, n_features).
+            y (np.ndarray): True values of shape (n_samples,).
+
+        Returns:
+            float: Accuracy score.
         """
         y_pred = self.predict(X)
-        return accuracy_score(y, y_pred)
+        accuracy = Accuracy().compute(y, y_pred)
+        return accuracy
 
-def generate_data(n_samples=100):
-    """
-    Generate synthetic data for testing.
 
-    Parameters:
-    n_samples (int): Number of samples to generate.
+def test_and_benchmark():
+    # Load and prepare the Iris dataset
+    data = load_iris()
+    X, y = data.data, data.target
 
-    Returns:
-    tuple: Feature matrix and label array.
-    """
-    np.random.seed(0)
-    X = np.random.randn(n_samples, 2)
-    y = np.array([0 if x[0] + x[1] < 0 else 1 for x in X])
-    return X, y
+    # Standardize the dataset
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
 
-def main():
-    # Generate data
-    X, y = generate_data()
+    # Split the dataset into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # From-scratch implementation
-    knn = KNN(k=3)
-    knn.fit(X, y)
-    accuracy_scratch = knn.score(X, y)
+    # Initialize and train the scratch KNN model
+    scratch_model = KNN(k=3)
+    start_time = time.time()
+    scratch_model.fit(X_train, y_train)
+    scratch_train_time = time.time() - start_time
 
-    # Scikit-learn implementation
-    sklearn_knn = SklearnKNN(n_neighbors=3)
-    sklearn_knn.fit(X, y)
-    accuracy_sklearn = sklearn_knn.score(X, y)
+    # Predict and evaluate the scratch model
+    scratch_predictions = scratch_model.predict(X_test)
+    scratch_accuracy = scratch_model.score(X_test, y_test)
+    scratch_precision = Precision().compute(y_test, scratch_predictions)
+    scratch_recall = Recall().compute(y_test, scratch_predictions)
+    scratch_f1 = F1Score().compute(y_test, scratch_predictions)
 
-    # Print results
-    print(f"From-scratch implementation accuracy: {accuracy_scratch}")
-    print(f"Scikit-learn implementation accuracy: {accuracy_sklearn}")
+    print(f"\nScratch Model - Accuracy: {scratch_accuracy:.4f}, Precision: {scratch_precision:.4f}, Recall: {scratch_recall:.4f}, F1 Score: {scratch_f1:.4f}, Training Time: {scratch_train_time:.4f}s")
+
+    # Initialize and train the scikit-learn KNN model
+    sklearn_model = SklearnKNeighborsClassifier(n_neighbors=3)
+    start_time = time.time()
+    sklearn_model.fit(X_train, y_train)
+    sklearn_train_time = time.time() - start_time
+
+    # Predict and evaluate the scikit-learn model
+    sklearn_predictions = sklearn_model.predict(X_test)
+    sklearn_accuracy = sklearn_model.score(X_test, y_test)
+    sklearn_precision = Precision().compute(y_test, sklearn_predictions)
+    sklearn_recall = Recall().compute(y_test, sklearn_predictions)
+    sklearn_f1 = F1Score().compute(y_test, sklearn_predictions)
+
+    print(f"Scikit-learn Model - Accuracy: {sklearn_accuracy:.4f}, Precision: {sklearn_precision:.4f}, Recall: {sklearn_recall:.4f}, F1 Score: {sklearn_f1:.4f}, Training Time: {sklearn_train_time:.4f}s")
+
+    # # Profiling the scratch model prediction
+    # cProfile.run('scratch_model.predict(X_test)', 'knn_profile.prof')
 
 if __name__ == "__main__":
-    main()
+    test_and_benchmark()
