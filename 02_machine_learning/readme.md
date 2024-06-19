@@ -13,10 +13,10 @@ LIST OF FROM SCRATCH IMPLEMENTATIONS IN THE PIPELINE:(Will be kept upto date wit
 
 7) Unsupervised Learning -> K_means                 (IMPLEMENTED)
 8) Unsupervised Learning -> PCA                     (IMPLEMENTED)
-9) Unsupervised Learning -> Hierarchical Clustering (YET TO BE IMPLEMENTED)
+9) Unsupervised Learning -> Hierarchical Clustering (WORK IN PROGRESS)
 
-10) Ensemble Methods     -> Random Forests          (YET TO BE IMPLEMENTED)
-11) Ensemble Methods     -> Gradient Boosting       (YET TO BE IMPLEMENTED)
+10) Ensemble Methods     -> Random Forests          (IMPLEMENTED)
+11) Ensemble Methods     -> Gradient Boosting       (WORK IN PROGRESS)
 
 #---------------------------------------------------------------------------------------------------------------
 
