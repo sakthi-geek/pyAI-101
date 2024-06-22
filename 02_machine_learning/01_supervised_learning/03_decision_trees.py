@@ -219,7 +219,7 @@ class DecisionTree:
 if __name__ == "__main__":
     from sklearn.datasets import load_iris
     from sklearn.model_selection import train_test_split
-    from common_components.evaluation_metrics import Accuracy
+    from pyAI.utils.metrics import Accuracy
 
     # Load dataset
     data = load_iris()

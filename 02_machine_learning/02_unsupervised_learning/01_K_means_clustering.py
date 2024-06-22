@@ -18,7 +18,7 @@ from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 import cProfile
-from common_components.evaluation_metrics import MeanSquaredError as MSEMetric
+from common.metrics import MeanSquaredError as MSEMetric
 
 class KMeans:
     """

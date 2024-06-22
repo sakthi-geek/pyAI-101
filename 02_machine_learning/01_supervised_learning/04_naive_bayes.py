@@ -15,7 +15,7 @@ from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.naive_bayes import GaussianNB as SklearnGaussianNB
-from common_components.evaluation_metrics import Accuracy, Precision, Recall, F1Score, LogLoss
+from common.metrics import Accuracy, Precision, Recall, F1Score, LogLoss
 import time
 import cProfile
 

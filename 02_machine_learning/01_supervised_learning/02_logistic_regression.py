@@ -11,10 +11,10 @@ sys.path.append(project_root_dir)
 #-------------------------------------------------------------------------------------------
 
 import numpy as np
-from common_components.activation_functions import Sigmoid
-from common_components.loss_functions import BinaryCrossEntropy
-from common_components.optimizers import SGD
-from common_components.evaluation_metrics import Accuracy, Precision, Recall, F1Score, LogLoss
+from common.activation import Sigmoid
+from common.loss import BinaryCrossEntropy
+from common.optimizer import SGD
+from common.metrics import Accuracy, Precision, Recall, F1Score, LogLoss
 from sklearn.datasets import load_breast_cancer
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler

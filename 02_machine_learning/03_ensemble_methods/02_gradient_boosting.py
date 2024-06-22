@@ -10,8 +10,8 @@ sys.path.append(project_root_dir)
 
 import numpy as np
 from decision_trees import DecisionTreeRegressor
-from common_components.evaluation_metrics import MeanSquaredError, RSquared
-from common_components.optimizers import SGD
+from common.metrics import MeanSquaredError, RSquared
+from common.optimizer import SGD
 import matplotlib.pyplot as plt
 
 class GradientBoostingRegressor:

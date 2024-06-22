@@ -9,9 +9,9 @@ sys.path.append(project_root_dir)
 #-------------------------------------------------------------------------------------------
 
 import numpy as np
-from common_components.loss_functions import MeanSquaredError
-from common_components.optimizers import SGD
-from common_components.evaluation_metrics import MeanSquaredError as MSEMetric, RSquared
+from common.loss import MeanSquaredError
+from common.optimizer import SGD
+from common.metrics import MeanSquaredError as MSEMetric, RSquared
 from sklearn.datasets import fetch_california_housing
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler

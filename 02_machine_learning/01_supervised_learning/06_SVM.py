@@ -15,9 +15,9 @@ from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC as SklearnSVC
-from common_components.evaluation_metrics import Accuracy, Precision, Recall, F1Score, confusion_matrix, ClassificationReport, RSquared
-from common_components.loss_functions import HingeLoss
-from common_components.optimizers import SGD
+from common.metrics import Accuracy, Precision, Recall, F1Score, confusion_matrix, ClassificationReport, RSquared
+from common.loss import HingeLoss
+from common.optimizer import SGD
 import time
 import cProfile
 

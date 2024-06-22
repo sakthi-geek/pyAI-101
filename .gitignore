@@ -1,5 +1,6 @@
-graph.png
-graph
-autograd/
 misc_stuff/
 misc/
+benchmark_datasets/
+*__pycache__/
+*.pyc
+*.pyo

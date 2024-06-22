@@ -15,7 +15,7 @@ from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import KNeighborsClassifier as SklearnKNeighborsClassifier
-from common_components.evaluation_metrics import Accuracy, Precision, Recall, F1Score
+from common.metrics import Accuracy, Precision, Recall, F1Score
 from collections import Counter
 import time
 import cProfile

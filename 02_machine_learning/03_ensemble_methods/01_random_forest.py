@@ -11,8 +11,8 @@ sys.path.append(project_root_dir)
 #-------------------------------------------------------------------------------------------
 
 import numpy as np
-from common_components.optimizers import SGD
-from common_components.evaluation_metrics import Accuracy
+from common.optimizer import SGD
+from common.metrics import Accuracy
 # from common_components.loss_functions import CrossEntropyLoss
 from decision_trees import DecisionTree
 
