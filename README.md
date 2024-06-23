@@ -142,22 +142,15 @@ pyAI-101/
 │ │ ├── loss.py 
 │ │ ├── activation.py 
 │ │ └── layers/
-│ │   ├── linear.py
-│ │   ├── conv.py
-│ │   ├── pooling.py
-│ │   ├── dropout.py
-│ │   ├── flatten.py
-│ │   ├── batch_norm.py
-│ │   ├── rnn.py
-│ │   └── attention.py
+│ │   └── linear.py
 │ ├── optim/
 │ │ ├── __init__.py 
 │ │ ├── optimizer.py 
 │ │ └── sgd.py 
-│ ├── utils/
-│ │ ├── __init__.py
-│ │ ├── metrics.py
-│ │ └── visualization.py
+│ └── utils/
+│   ├── __init__.py
+│   ├── metrics.py
+│   └── visualization.py
 │
 └── resources/
   ├── seminal_papers/

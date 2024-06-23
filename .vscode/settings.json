@@ -1,5 +1,0 @@
-{
-    "python.analysis.extraPaths": [
-        "./02_machine_learning/common/optimisers"
-    ]
-}
