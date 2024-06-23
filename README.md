@@ -21,7 +21,7 @@ Welcome to **pyAI-101**, an educational project designed to guide learners throu
 
 ## Project Aim
 
-The project started as a personal learning project doing from scratch implementations of AI models/architectures but evolved into more of a learning resource for the community. 
+The project started as a personal learning project doing from scratch implementations of AI models/architectures but evolved into more of a learning resource that I want to share with the community. 
 
 **pyAI-101** aims to:
 
