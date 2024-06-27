@@ -1,0 +1,29 @@
+{
+    "train_loss": [
+        1.8747687139310636
+    ],
+    "val_loss": [
+        2.168843251163677
+    ],
+    "train_metrics": {
+        "MulticlassAccuracy": [
+            0.29764705896377563
+        ],
+        "MulticlassAUROC": [
+            0.7789611220359802
+        ]
+    },
+    "val_metrics": {
+        "MulticlassAccuracy": [
+            0.30906665325164795
+        ],
+        "MulticlassAUROC": [
+            0.802277684211731
+        ]
+    },
+    "test_loss": 2.2015714526216033,
+    "test_metrics": {
+        "MulticlassAccuracy": 0.3151000142097473,
+        "MulticlassAUROC": 0.8000034689903259
+    }
+}
