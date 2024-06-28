@@ -9,12 +9,13 @@ import torch.nn as nn
 import torch.optim as optim
 import torchmetrics
 from torchvision import datasets, transforms
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, random_split, SubsetRandomSampler
 from utils import (
     build_transforms,
     get_mean_std,
     load_checkpoint,
     plot_images,
+    plot_small_images,
     train,
     evaluate,
     plot_learning_curve,
@@ -24,6 +25,7 @@ from utils import (
 )
 import logging
 from base_model import BaseModel
+import numpy as np
 
 # Initialize logging
 logging.basicConfig(
@@ -120,7 +122,7 @@ def preprocess_MNIST_data_for_LeNet(
     print(f"Calculated Mean: {mean}")
     print(f"Calculated Std Dev: {std_dev}")
 
-    plot_images(full_train_dataset_raw, class_names=full_train_dataset_raw.classes)
+    plot_small_images(full_train_dataset_raw, class_names=full_train_dataset_raw.classes)
 
     # Define transformations for MNIST dataset for LeNet - LeNet expects 32x32 images but MNIST images are 28x28
     train_transform = transforms.Compose(
@@ -179,60 +181,77 @@ def preprocess_MNIST_data_for_LeNet(
 
 
 def preprocess_CIFAR10_data_for_LeNet(
-    batch_size, val_size=0.15, test_size=0.2, augmentation=None
-):
+    batch_size, val_size=0.15, test_size=0.2, random_seed=42, augmentation=None,
+    show_sample=False):
 
     # Load the CIFAR-10 dataset without any transforms to compute mean and std
     full_train_dataset_raw = datasets.CIFAR10(
         "./data", train=True, download=True, transform=transforms.ToTensor()
     )
-    loader = DataLoader(full_train_dataset_raw, batch_size=batch_size, shuffle=False)
+    NUM_CLASSES = len(full_train_dataset_raw.classes)
+
+    n_train = len(full_train_dataset_raw)
+    indices = list(range(n_train))
+    split = int(np.floor(val_size * n_train))
+
+    np.random.seed(random_seed)
+    np.random.shuffle(indices)
+
+    train_idx, valid_idx = indices[split:], indices[:split]
+    print(f"Number of training samples: {len(train_idx)}")
+    print(f"Number of validation samples: {len(valid_idx)}")
+    train_sampler = SubsetRandomSampler(train_idx)
+    val_sampler = SubsetRandomSampler(valid_idx)
+    
+    train_loader = DataLoader(full_train_dataset_raw, batch_size=batch_size, sampler=train_sampler, num_workers=4)
+
     mean, std_dev = get_mean_std(
-        loader
+        train_loader
     )  # Get mean and std dev for CIFAR-10 dataset - scalable to large datasets
 
     print(f"Calculated Mean: {mean}")
     print(f"Calculated Std Dev: {std_dev}")
 
-    plot_images(full_train_dataset_raw, class_names=full_train_dataset_raw.classes)
-
     # Define transformations for CIFAR-10 dataset with augmentation
     train_transform = build_transforms(
         normalization=(mean, std_dev), augmentation=augmentation
     )
-    test_transform = transforms.Compose(
+    val_test_transform = transforms.Compose(
         [
             transforms.ToTensor(),
-            transforms.Normalize(
-                mean, std_dev
-            ),  # Mean and std dev for CIFAR-10 dataset -[0.4914, 0.4822, 0.4465], [0.2470, 0.2435, 0.2616]
+            transforms.Normalize(mean, std_dev),
         ]
     )
+    
+    # Apply the transformations to the raw training and validation sets
+    train_dataset = datasets.CIFAR10("./data", train=True, download=True, transform=train_transform)
+    val_dataset = datasets.CIFAR10("./data", train=True, download=True, transform=val_test_transform)
 
-    # Load the CIFAR-10 dataset
-    full_train_dataset = datasets.CIFAR10(
-        "./data", train=True, download=True, transform=train_transform
-    )
-    test_dataset = datasets.CIFAR10(
-        "./data", train=False, download=True, transform=test_transform
-    )
-    logging.info("Loaded CIFAR-10 dataset with LeNet transforms and augmentation")
+    # Create DataLoaders for training and validation sets
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, sampler=val_sampler, num_workers=4)
 
-    # Split the dataset into training and validation sets
-    val_size = int(val_size * len(full_train_dataset))
-    train_size = len(full_train_dataset) - val_size
-    train_dataset, val_dataset = random_split(
-        full_train_dataset, [train_size, val_size]
-    )
+    print(f"Number of training samples: {len(train_loader.sampler)}")
+    print(f"Number of validation samples: {len(val_loader.sampler)}")
+    
+    # Load and transform the test dataset
+    test_dataset = datasets.CIFAR10("./data", train=False, download=True, transform=val_test_transform)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False) # Batch size of 1 for testing
 
-    # Create DataLoader for each set
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    test_loader = DataLoader(
-        test_dataset, batch_size=1, shuffle=False
-    )  # Batch size of 1 for testing
+    class_names = train_dataset.classes
+    if show_sample:
+        plot_small_images(full_train_dataset_raw, class_names=full_train_dataset_raw.classes)
+        sample_loader = DataLoader(
+            full_train_dataset_raw, batch_size=9, shuffle=True,
+            num_workers=0
+        )
+        for images, labels in sample_loader:
+            print(images.shape, labels.shape)
+            print(images.numpy().shape)
+            X = images.numpy().transpose(0,2,3,1)
+            plot_images(X, class_names, labels)
 
-    return train_loader, val_loader, test_loader
+    return train_loader, val_loader, test_loader, NUM_CLASSES
 
 
 
@@ -308,11 +327,9 @@ def main(config_path):
     elif DATASET == "CIFAR-10":
         input_channels = 3
         # Load and preprocess the CIFAR-10 dataset
-        train_loader, val_loader, test_loader = preprocess_CIFAR10_data_for_LeNet(
-            BATCH_SIZE,
-            val_size=VAL_SIZE,
-            test_size=TEST_SIZE,
-            augmentation=AUGMENTATION,
+        train_loader, val_loader, test_loader, NUM_CLASSES = preprocess_CIFAR10_data_for_LeNet(
+            BATCH_SIZE, val_size=VAL_SIZE, test_size=TEST_SIZE, random_seed=SEED, augmentation=AUGMENTATION,
+            show_sample=False
         )
         logging.info("Loaded CIFAR-10 dataset")
 

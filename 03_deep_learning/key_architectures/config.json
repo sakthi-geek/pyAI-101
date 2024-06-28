@@ -103,6 +103,77 @@
         "load_saved_metrics": false,
         "saved_metrics_filepath": "03_deep_learning/key_architectures/metrics/resnet/metrics.json"
 
+    },
+
+    "DenseNet": {
+        "hyperparameters": {
+            "seed": 42,
+            "batch_size": 128,
+            "learning_rate": 0.005,
+            "epochs": 30,
+            "model": "DenseNet-169",
+            "loss_function": "CrossEntropyLoss",
+            "optimizer": "Adam",
+            "scheduler": null,
+            "metrics": ["Accuracy", "AUROC"]
+        },
+        "data": {
+            "dataset": "CIFAR-10",
+            "test_size": 0.2,
+            "val_size": 0.15,
+            "augmentation": [
+                {"type": "RandomHorizontalFlip",    "params": {"p": 0.5}},
+                {"type": "RandomRotation",          "params": {"degrees": 15}},
+                {"type": "RandomResizedCrop",       "params": {"size": 32, "scale": [0.8, 1.0]}}
+            ]
+        },
+        "device": "cuda",
+        "model_save_dir": "03_deep_learning/key_architectures/model_artifacts/densenet/",
+        "plot_save_dir": "03_deep_learning/key_architectures/plots/densenet",
+        "metrics_save_dir": "03_deep_learning/key_architectures/metrics/densenet",
+        
+        "train_from_checkpoint": false,
+        "model_checkpoint_dir": "03_deep_learning/key_architectures/model_artifacts/densenet/checkpoints",
+
+        "skip_training": false,
+        "load_saved_metrics": false,
+        "saved_metrics_filepath": "03_deep_learning/key_architectures/metrics/densenet/metrics.json"
+    },
+
+    "EfficientNet": {
+        "hyperparameters": {
+            "seed": 42,
+            "batch_size": 128,
+            "learning_rate": 0.005,
+            "epochs": 50,
+            "model": "EfficientNet-B0",
+            "loss_function": "CrossEntropyLoss",
+            "optimizer": "Adam",
+            "scheduler": null,
+            "metrics": ["Accuracy", "AUROC"]
+        },
+        "data": {
+            "dataset": "CIFAR-10",
+            "test_size": 0.2,
+            "val_size": 0.15,
+            "augmentation": [
+                {"type": "Resize",                 "params": {"size": 224}},
+                {"type": "RandomHorizontalFlip",    "params": {"p": 0.5}},
+                {"type": "RandomRotation",          "params": {"degrees": 15}},
+                {"type": "RandomResizedCrop",       "params": {"size": 224, "scale": [0.8, 1.0]}}
+            ]
+        },
+        "device": "cuda",
+        "model_save_dir": "03_deep_learning/key_architectures/model_artifacts/efficientnet/",
+        "plot_save_dir": "03_deep_learning/key_architectures/plots/efficientnet",
+        "metrics_save_dir": "03_deep_learning/key_architectures/metrics/efficientnet",
+
+        "train_from_checkpoint": false,
+        "model_checkpoint_dir": "03_deep_learning/key_architectures/model_artifacts/efficientnet/checkpoints",
+
+        "skip_training": false,
+        "load_saved_metrics": false,
+        "saved_metrics_filepath": "03_deep_learning/key_architectures/metrics/efficientnet/metrics.json"
     }
 
 }

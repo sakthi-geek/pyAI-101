@@ -2,6 +2,7 @@ from datetime import datetime
 import os
 import matplotlib.pyplot as plt
 import logging
+import numpy as np
 from sklearn.model_selection import train_test_split
 import torch
 import torch.nn as nn
