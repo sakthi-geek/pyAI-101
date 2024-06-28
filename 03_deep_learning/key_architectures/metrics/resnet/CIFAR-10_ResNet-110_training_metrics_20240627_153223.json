@@ -1,0 +1,36 @@
+{
+    "train_loss": [
+        1.719742499314271
+    ],
+    "val_loss": [
+        1.8518402960340856
+    ],
+    "train_metrics": {
+        "MulticlassAccuracy": [
+            0.36289411783218384
+        ],
+        "MulticlassAUROC": [
+            0.8171947598457336
+        ],
+        "MulticlassConfusionMatrix": [
+            425.0
+        ]
+    },
+    "val_metrics": {
+        "MulticlassAccuracy": [
+            0.34933334589004517
+        ],
+        "MulticlassAUROC": [
+            0.8560646176338196
+        ],
+        "MulticlassConfusionMatrix": [
+            75.0
+        ]
+    },
+    "test_loss": 1.799226061675651,
+    "test_metrics": {
+        "MulticlassAccuracy": 0.36649999022483826,
+        "MulticlassAUROC": 0.8678186535835266,
+        "MulticlassConfusionMatrix": 100.0
+    }
+}

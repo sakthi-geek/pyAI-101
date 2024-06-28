@@ -31,236 +31,136 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-
-class BasicBlock(nn.Module):
-    expansion = 1
-
-    def __init__(self, in_channels, out_channels, stride=1, downsample=None):
-        super(BasicBlock, self).__init__()
-        # First convolutional layer
-        self.conv1 = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size=3,
-            stride=stride,
-            padding=1,
-            bias=False,
-        )
-        self.bn1 = nn.BatchNorm2d(
-            out_channels
-        )  # Batch normalization - to stabilize and accelerate training
-        # Second convolutional layer
-        self.conv2 = nn.Conv2d(
-            out_channels,
-            out_channels * self.expansion,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-            bias=False,
-        )
-        self.bn2 = nn.BatchNorm2d(out_channels * self.expansion)
-        # ReLU activation function - to introduce non-linearity
-        self.relu = nn.ReLU(inplace=True)
-        self.downsample = downsample
-
-    def forward(self, x):
-        identity = x
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-
-        if self.downsample is not None:
-            identity = self.downsample(x)
-
-        out += identity
-        out = self.relu(out)
-
-        return out
-
-
-class Bottleneck(nn.Module):
-    expansion = 4
-
-    def __init__(self, in_planes, planes, stride=1, downsample=None):
+class DenseLayer(nn.Module):
+    def __init__(self, input_features, growth_rate, bottleneck_width):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(planes)
-        self.conv2 = nn.Conv2d(
-            planes, planes, kernel_size=3, stride=stride, padding=1, bias=False
-        )
-        self.bn2 = nn.BatchNorm2d(planes)
-        self.conv3 = nn.Conv2d(
-            planes, planes * self.expansion, kernel_size=1, bias=False
-        )
-        self.bn3 = nn.BatchNorm2d(planes * self.expansion)
-        self.relu = nn.ReLU(inplace=True)
-        self.downsample = downsample
-
+        inter_channels = bottleneck_width * growth_rate
+        
+        # Bottleneck layers
+        self.bn1 = nn.BatchNorm2d(input_features)
+        self.relu1 = nn.ReLU(inplace=True)
+        self.conv1 = nn.Conv2d(input_features, inter_channels, kernel_size=1, stride=1, bias=False)
+        
+        # Composite function (3x3 convolution)
+        self.bn2 = nn.BatchNorm2d(inter_channels)
+        self.relu2 = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(inter_channels, growth_rate, kernel_size=3, stride=1, padding=1, bias=False)
+    
     def forward(self, x):
-        identity = x
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out = self.relu(out)
-
-        out = self.conv3(out)
-        out = self.bn3(out)
-
-        if self.downsample is not None:
-            identity = self.downsample(x)
-
-        out += identity
-        out = self.relu(out)
-
-        return out
-
-
-class ResNet(nn.Module):
-    def __init__(self, block, layers, num_classes=10, dataset="CIFAR-10", init_weights=True):
+        concatenated_features = torch.cat(x, 1)
+        bottleneck_output = self.conv1(self.relu1(self.bn1(concatenated_features))) 
+        new_features = self.conv2(self.relu2(self.bn2(bottleneck_output)))
+        return new_features
+    
+class DenseBlock(nn.Module):
+    def __init__(self, num_layers, input_features, growth_rate, bottleneck_width):
         super().__init__()
-        
-        if dataset == "CIFAR-10":
-            self.in_channels = 16
-            self.out_channels = [16, 32, 64, 128]
-            self.conv1 = nn.Conv2d(3, self.in_channels, kernel_size=3, stride=1, padding=1, bias=False)
-        elif dataset == "ImageNet":
-            self.in_channels = 64
-            self.out_channels = [64, 128, 256, 512]
-            self.conv1 = nn.Conv2d(3, self.in_channels, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1 = nn.BatchNorm2d(self.in_channels)
+        self.layers = nn.ModuleList()
+        for i in range(num_layers):
+            layer = DenseLayer(input_features + i * growth_rate, growth_rate, bottleneck_width)
+            self.layers.append(layer)
+    
+    def forward(self, x):
+        features = [x]
+        for layer in self.layers:
+            new_features = layer(features)
+            features.append(new_features)
+        return torch.cat(features, 1)
+
+class TransitionLayer(nn.Module):
+    def __init__(self, input_features, output_features):
+        super().__init__()
+        self.bn = nn.BatchNorm2d(input_features)
         self.relu = nn.ReLU(inplace=True)
-        if dataset == "ImageNet":
-            self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.conv = nn.Conv2d(input_features, output_features, kernel_size=1, stride=1, bias=False)
+        self.pool = nn.AvgPool2d(kernel_size=2, stride=2)
+    
+    def forward(self, x):
+        x = self.bn(x)
+        x = self.relu(x)
+        x = self.conv(x)
+        x = self.pool(x)
+        return x
+
+class DenseNet(nn.Module):              # Implementing DenseNet-BC (Bottleneck and Compression)
+    def __init__(self, num_blocks, num_layers_per_block, growth_rate, reduction, num_classes, bottleneck_width=4, device="cuda"):
+        super().__init__()
+        num_features = 2 * growth_rate  # Initial number of features is twice the growth rate
+        self.conv1 = nn.Conv2d(3, num_features, kernel_size=7, stride=2, padding=3, bias=False)  # Initial convolution
+        self.bn1 = nn.BatchNorm2d(num_features)
+        self.relu = nn.ReLU(inplace=True)
+        self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
-        # Layer definitions
-        self.layer1 = self._make_layer(block, self.out_channels[0], layers[0])
-        self.layer2 = self._make_layer(block, self.out_channels[1], layers[1], stride=2)
-        self.layer3 = self._make_layer(block, self.out_channels[2], layers[2], stride=2)
-        # Only create layer4 if it's specified in the layers list
-        if len(layers) > 3:
-            self.layer4 = self._make_layer(block, self.out_channels[3], layers[3], stride=2)
-            self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-            self.fc = nn.Linear(self.out_channels[3] * block.expansion, num_classes)
-        else:
-            self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-            self.fc = nn.Linear(self.out_channels[2] * block.expansion, num_classes)
+        # Dense Blocks and Transition Layers
+        self.dense_blocks = nn.ModuleList()
+        self.trans_layers = nn.ModuleList()
+        
+        # Each dense block
+        for i in range(num_blocks):
+            block = DenseBlock(num_layers_per_block[i], num_features, growth_rate, bottleneck_width)
+            self.dense_blocks.append(block)
+            num_features += num_layers_per_block[i] * growth_rate
+            
+            if i != num_blocks - 1:  # No transition layer after the last block
+                out_features = int(num_features * reduction)    # Apply compression to reduce the number of features
+                transition = TransitionLayer(num_features, out_features)
+                self.trans_layers.append(transition)
+                num_features = out_features
 
-        if init_weights:
-            self._initialize_weights()
+        # Final batch norm  
+        self.bn2 = nn.BatchNorm2d(num_features)
 
-    def _make_layer(self, block, out_channels, blocks, stride=1):
-        downsample = None
-        if stride != 1 or self.in_channels != out_channels * block.expansion:
-            downsample = nn.Sequential(
-                nn.Conv2d(
-                    self.in_channels,
-                    out_channels * block.expansion,
-                    kernel_size=1,
-                    stride=stride,
-                    bias=False,
-                ),
-                nn.BatchNorm2d(out_channels * block.expansion),
-            )
+        # Global average pooling
+        self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
 
-        layers = []
-        layers.append(block(self.in_channels, out_channels, stride, downsample))
-        self.in_channels = out_channels * block.expansion
-        for _ in range(1, blocks):
-            layers.append(block(self.in_channels, out_channels))
+        #Linear layer
+        self.fc = nn.Linear(num_features, num_classes)
 
-        return nn.Sequential(*layers)
-
+        self._initialize_weights()
+    
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
-        if hasattr(self, 'maxpool'):
-            x = self.maxpool(x)
-
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-
-        if hasattr(self, 'layer4'):
-            x = self.layer4(x)
-
-        x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        x = self.fc(x)
-
+        x = self.pool(x)
+        for dense_block, transition_layer in zip(self.dense_blocks, self.trans_layers):
+            x = dense_block(x)
+            x = transition_layer(x)
+        # Last block without transition layer
+        x = self.dense_blocks[-1](x)    # Last dense block
+        x = self.bn2(x)                 # Final batch norm
+        x = self.avg_pool(x)            # Global average pooling
+        x = torch.flatten(x, 1)         # Flatten
+        x = self.fc(x)                  # Linear layer
         return x
-
+    
     def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+                nn.init.kaiming_normal_(m.weight)
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.constant_(m.bias, 0)
 
-    def predict(self, x):
-        probabilities = torch.softmax(self.forward(x), dim=1)
-        predicted_class = torch.argmax(probabilities, dim=1)
-        return predicted_class
+def densenet121(num_classes):
+    return DenseNet(num_blocks=4, num_layers_per_block=[6, 12, 24, 16], growth_rate=32, reduction=0.5, num_classes=num_classes, bottleneck_width=4)
 
-#------- ImageNet ResNet Architectures -------#
+def densenet161(num_classes):
+    return DenseNet(num_blocks=4, num_layers_per_block=[6, 12, 36, 24], growth_rate=48, reduction=0.5, num_classes=num_classes, bottleneck_width=4)
 
-def resnet18(num_classes=1000):
-    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes)
+def densenet169(num_classes):
+    return DenseNet(num_blocks=4, num_layers_per_block=[6, 12, 32, 32], growth_rate=32, reduction=0.5, num_classes=num_classes, bottleneck_width=4)
 
+def densenet201(num_classes):
+    return DenseNet(num_blocks=4, num_layers_per_block=[6, 12, 48, 32], growth_rate=32, reduction=0.5, num_classes=num_classes, bottleneck_width=4)
 
-def resnet34(num_classes=1000):
-    return ResNet(BasicBlock, [3, 4, 6, 3], num_classes)
-
-
-def resnet50(num_classes=1000):
-    return ResNet(Bottleneck, [3, 4, 6, 3], num_classes)
-
-
-def resnet101(num_classes=1000):
-    return ResNet(Bottleneck, [3, 4, 23, 3], num_classes)
+def densenet264(num_classes):
+    return DenseNet(num_blocks=4, num_layers_per_block=[6, 12, 64, 48], growth_rate=32, reduction=0.5, num_classes=num_classes, bottleneck_width=4)
 
 
-def resnet152(num_classes=1000):
-    return ResNet(Bottleneck, [3, 8, 36, 3], num_classes)
-
-
-# ------- CIDAR-10 ResNet Architectures -------#
-
-def resnet20(num_classes=10):
-    return ResNet(BasicBlock, [3, 3, 3], num_classes)
-
-
-def resnet32(num_classes=10):
-    return ResNet(BasicBlock, [5, 5, 5], num_classes)
-
-
-def resnet44(num_classes=10):
-    return ResNet(BasicBlock, [7, 7, 7], num_classes)
-
-
-def resnet56(num_classes=10):
-    return ResNet(BasicBlock, [9, 9, 9], num_classes)
-
-
-def resnet110(num_classes=10):
-    return ResNet(BasicBlock, [18, 18, 18], num_classes)
-
-
-def resnet1202(num_classes=10):
-    return ResNet(BasicBlock, [200, 200, 200], num_classes)
-
-
-
-def preprocess_CIFAR10_data_for_ResNet(
+def preprocess_CIFAR10_data_for_DenseNet(
     batch_size, val_size=0.15, test_size=0.2, random_seed=42, augmentation=None,
     show_sample=False):
 
@@ -278,8 +178,6 @@ def preprocess_CIFAR10_data_for_ResNet(
     np.random.shuffle(indices)
 
     train_idx, valid_idx = indices[split:], indices[:split]
-    print(f"Number of training samples: {len(train_idx)}")
-    print(f"Number of validation samples: {len(valid_idx)}")
     train_sampler = SubsetRandomSampler(train_idx)
     val_sampler = SubsetRandomSampler(valid_idx)
     
@@ -287,7 +185,7 @@ def preprocess_CIFAR10_data_for_ResNet(
 
     mean, std_dev = get_mean_std(
         train_loader
-    )  # Get mean and std dev for CIFAR-10 dataset - scalable to large datasets
+    )  # Get mean and std dev for CIFAR-10 dataset 
 
     print(f"Calculated Mean: {mean}")
     print(f"Calculated Std Dev: {std_dev}")
@@ -338,66 +236,53 @@ def preprocess_CIFAR10_data_for_ResNet(
 
 def main(config_path):
     with open(config_path) as f:
-        config = json.load(f)["ResNet"]
+        config = json.load(f)["DenseNet"]
 
     # Important Hyperparameters
     SEED = config.get("hyperparameters", {}).get("seed", 42)
-    BATCH_SIZE = config.get("hyperparameters", {}).get("batch_size", 32)
-    LEARNING_RATE = config.get("hyperparameters", {}).get("learning_rate", 0.005)
-    DEVICE = config.get("hyperparameters", {}).get("device", "cuda")
-    EPOCHS = config.get("hyperparameters", {}).get("epochs", 100)
-    MODEL = config.get("hyperparameters", {}).get("model", "ResNet-110")
-    LOSS_FUNCTION = config.get("hyperparameters", {}).get(
-        "loss_function", "CrossEntropyLoss"
-    )
-    OPTIMIZER = config.get("hyperparameters", {}).get("optimizer", "Adam")
-    METRICS = config.get("hyperparameters", {}).get("metrics", ["Accuracy", "AUROC"])
+    BATCH_SIZE = config.get("hyperparameters", {}).get("batch_size", None)
+    LEARNING_RATE = config.get("hyperparameters", {}).get("learning_rate", None)
+    EPOCHS = config.get("hyperparameters", {}).get("epochs", None)
+    MODEL = config.get("hyperparameters", {}).get("model", None)
+    LOSS_FUNCTION = config.get("hyperparameters", {}).get("loss_function", None)
+    OPTIMIZER = config.get("hyperparameters", {}).get("optimizer", None)
+    SCHEDULER = config.get("hyperparameters", {}).get("scheduler", None)
+    METRICS = config.get("hyperparameters", {}).get("metrics", None)
 
-    DATASET = config.get("data", {}).get("dataset", "CIFAR-100")
-    DATA_DIR = config.get("data", {}).get("data_dir", "./data")
-    VAL_SIZE = config.get("data", {}).get("val_size", 0.15)
-    TEST_SIZE = config.get("data", {}).get("test_size", 0.15)
+    DATASET = config.get("data", {}).get("dataset", None)
+    DATA_DIR = config.get("data", {}).get("data_dir", None)
+    VAL_SIZE = config.get("data", {}).get("val_size", None)
+    TEST_SIZE = config.get("data", {}).get("test_size", None)
     AUGMENTATION = config.get("data", {}).get("augmentation", False)
 
-    MODEL_SAVE_DIR = config.get(
-        "model_save_path", "03_deep_learning/key_architectures/model_artifacts/resnet"
-    )
+    DEVICE = config.get("device", None)
+    MODEL_SAVE_DIR = config.get("model_save_dir", None)
     pathlib.Path(MODEL_SAVE_DIR).mkdir(parents=True, exist_ok=True)
-    METRICS_SAVE_DIR = config.get(
-        "metrics_save_dir", "03_deep_learning/key_architectures/metrics/resnet"
-    )
+    METRICS_SAVE_DIR = config.get("metrics_save_dir", None)
     pathlib.Path(METRICS_SAVE_DIR).mkdir(parents=True, exist_ok=True)
-    PLOT_SAVE_DIR = config.get(
-        "plot_save_dir", "03_deep_learning/key_architectures/plots/resnet"
-    )
+    PLOT_SAVE_DIR = config.get("plot_save_dir", None)
     pathlib.Path(PLOT_SAVE_DIR).mkdir(parents=True, exist_ok=True)
 
     # Training from a checkpoint
     TRAIN_FROM_CHECKPOINT = config.get("train_from_checkpoint", False)
-    MODEL_CHECKPOINT_DIR = config.get(
-        "model_checkpoint_dir",
-        "03_deep_learning/key_architectures/model_artifacts/resnet/checkpoints",
-    )
+    MODEL_CHECKPOINT_DIR = config.get("model_checkpoint_dir", None)
     pathlib.Path(MODEL_CHECKPOINT_DIR).mkdir(parents=True, exist_ok=True)
 
     # Skip training
     SKIP_TRAINING = config.get("skip_training", False)
     LOAD_SAVED_METRICS = config.get("load_saved_metrics", False)
-    SAVED_METRICS_FILEPATH = config.get(
-        "saved_metrics_filepath",
-        "03_deep_learning/key_architectures/metrics/resnet/CIFAR-100_ResNet_training_metrics.json",
-    )
+    SAVED_METRICS_FILEPATH = config.get("saved_metrics_filepath", None)
 
     # Set random seed for reproducibility
     torch.manual_seed(SEED)
     torch.cuda.manual_seed(SEED)
 
     # Load and preprocess the CIFAR-10 dataset
-    train_loader, val_loader, test_loader, NUM_CLASSES = preprocess_CIFAR10_data_for_ResNet(
+    train_loader, val_loader, test_loader, NUM_CLASSES = preprocess_CIFAR10_data_for_DenseNet(
         BATCH_SIZE, val_size=VAL_SIZE, test_size=TEST_SIZE, random_seed=SEED, augmentation=AUGMENTATION,
         show_sample=False
     )
-    logging.info("Loaded CIFAR-10 dataset")
+    logging.info("Loaded {} dataset")
 
     # Get input size dynamically from input in the format -> [B,C,H,W]
     INPUT_SIZE = (BATCH_SIZE, train_loader.dataset[0][0].shape[0], 
@@ -413,29 +298,40 @@ def main(config_path):
 
     #--------------------------------------------------------------------------------------
     # Initialize the model
-    if MODEL == "ResNet-110":
-        model = resnet110().to(DEVICE)
-        logging.info("Initialized ResNet-18 model")
+    if MODEL == "DenseNet-169":
+        model = densenet169(NUM_CLASSES).to(DEVICE)
+        logging.info("Initialized {} model".format(MODEL))
     else:
-        raise ValueError(f"Unknown ResNet architecture: {MODEL}")
+        raise ValueError(f"Unknown architecture: {MODEL}")
 
     # Loss function
     if LOSS_FUNCTION == "CrossEntropyLoss":
         criterion = nn.CrossEntropyLoss().to(DEVICE)
-        logging.info("Using CrossEntropyLoss")
+        logging.info("Using {}".format(LOSS_FUNCTION)) 
     else:
         raise ValueError(f"Unknown loss function: {LOSS_FUNCTION}")
 
     # Optimizer
     if OPTIMIZER == "Adam":
         optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-        logging.info("Using Adam optimizer")
+        logging.info("Using {} optimizer".format(OPTIMIZER))
     elif OPTIMIZER == "SGD":
         optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
-        logging.info("Using SGD optimizer with momentum 0.9")
+        logging.info("Using {} optimizer with momentum 0.9".format(OPTIMIZER))
     else:
         raise ValueError(f"Unknown optimizer: {OPTIMIZER}")
-
+    
+    # Scheduler
+    if SCHEDULER == "StepLR":
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+        logging.info("Using {} scheduler".format(SCHEDULER))
+    elif SCHEDULER == "ReduceLROnPlateau":
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=5, verbose=True)
+        logging.info("Using {} scheduler".format(SCHEDULER))
+    else:
+        scheduler = None
+        logging.warning(f"Unknown scheduler: {SCHEDULER}. Training will continue without a scheduler.")
+        
     # Model summary
     logging.info(model)
     logging.info(
@@ -476,6 +372,7 @@ def main(config_path):
             metrics,
             optimizer,
             EPOCHS,
+            scheduler=scheduler,
             early_stopping_patience=15,
             checkpoint_path=checkpoint_path,
             device=DEVICE,
@@ -568,11 +465,11 @@ def main(config_path):
 
         model_save_path = MODEL_SAVE_DIR + "/{}_{}.pth".format(DATASET, MODEL)
         # Load the trained model
-        model = resnet110(device=DEVICE).to(DEVICE)
+        model = densenet169(NUM_CLASSES).to(DEVICE)
         model = load_model(model, model_save_path, device=DEVICE)
 
         # Predict on test data
-        test_loader = preprocess_CIFAR10_data_for_ResNet(
+        test_loader = preprocess_CIFAR10_data_for_DenseNet(
             BATCH_SIZE, val_size=VAL_SIZE
         )[2]
 
@@ -608,7 +505,7 @@ def main(config_path):
     )
     pathlib.Path(plot_save_path).parent.mkdir(parents=True, exist_ok=True)
     plot_learning_curve(
-        train_losses, val_losses, title="LeNet Learning Curve", save_path=plot_save_path
+        train_losses, val_losses, title="{}_{}_Learning_Curve".format(DATASET, MODEL), save_path=plot_save_path
     )
 
     plot_save_path = PLOT_SAVE_DIR + "/{}_{}.png".format(DATASET, MODEL)

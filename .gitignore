@@ -52,5 +52,8 @@ config.ini
 misc_stuff/
 misc/
 benchmark_datasets/
+data/
+checkpoints/
+model_artifacts/
 *.pyc
 *.pyo

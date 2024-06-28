@@ -201,7 +201,7 @@ The directory structure and custom implementation purposefully mimics that of th
 ### Prerequisites
 
 - Python 3.7 or higher
-- Important packages - `numpy`, `pandas`, `matplotlib`, `scikit-learn`, `torch`, `torchmetrics`
+- Important packages - `numpy`, `pandas`, `matplotlib`, `scikit-learn`, `torch`, `torchmetrics`, `torchvision`, `torchtext`
 - Please see [requirements.txt](requirements.txt) for a list of libraries needed to run the code.
 
 ### Installation
